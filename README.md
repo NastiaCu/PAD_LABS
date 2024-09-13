@@ -28,6 +28,9 @@ Similar platforms, like Reddit, use microservices for independent features like 
 #### gRPC Communication:
 * Used for internal communication between the User Service and the Recommendation / Discussion Service.
 
+### System Architecture Diagram:
+![alt text](image.png)
+
 ## Technology Stack and Communication Patterns: 
 
 ### Service 1: User Service (Python)
