@@ -15,21 +15,20 @@ Similar platforms, like Reddit, use microservices for independent features like 
 
 #### User Service: 
 * Manages user registration, authentication, and profiles.
-* Communicates with Recommendation / Discussion Service via gRPC.
+
 #### Recommendation / Discussion Service: 
 * Manages car recommendations, posts, and comments.
 * Supports WebSocket for real-time discussions.
-* Communicates with the User Service via gRPC for user validation.
 #### API Gateway: 
 * Central entry point for external clients.
 * Routes requests to services based on the API paths.
 #### Load Balancers:
 * Distribute traffic across multiple instances of each service.
 #### gRPC Communication:
-* Used for internal communication between the User Service and the Recommendation / Discussion Service.
+* Used for internal communication between services and Service discovery.
 
 ### System Architecture Diagram:
-![alt text](image.png)
+![alt text](scheme.png)
 
 ## Technology Stack and Communication Patterns: 
 
@@ -55,18 +54,18 @@ Manages car recommendations and real-time discussions between users.
 >
 >FastAPI WebSocket (Python) for managing real-time discussions using WebSocket.
 >#### Database:
->MongoDB: For storing recommendation data (e.g., car models, user ratings).
+>PostgreSQL
 >
 >Redis: For managing WebSocket sessions in real-time discussions.
 
->### API Gateway
+### API Gateway
 >Framework: Express.js (Node.js)
 
 ### Communication Patterns
 >#### RESTful APIs:
 >Used for HTTP communication between external clients and services.
 >#### gRPC:
->For efficient communication between the User Service and Recommendations/ Discussions Service.
+>For efficient communication between services and service discovery.
 >#### WebSocket:
 >For real-time, bi-directional communication in the Discussions Service.
 
