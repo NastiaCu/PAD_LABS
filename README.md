@@ -46,25 +46,28 @@ Handles user registration, authentication, and profile management.
 >#### ORM: 
 >SQLAlchemy
 
-### Service 2: Recommendations and Discussions Service (JavaScript + Python)
+### Service 2: Recommendations and Discussions Service (Python)
 
 Manages car recommendations and real-time discussions between users.
 
 >#### Framework:
 >FastAPI (Python) for handling recommendations (RESTful API).
 >
->Node.js + Socket.io (JavaScript) for managing real-time discussions using WebSocket.
+>FastAPI WebSocket (Python) for managing real-time discussions using WebSocket.
 >#### Database:
 >MongoDB: For storing recommendation data (e.g., car models, user ratings).
 >
 >Redis: For managing WebSocket sessions in real-time discussions.
+
+>### API Gateway
+>Framework: Express.js (Node.js)
 
 ### Communication Patterns
 >#### RESTful APIs:
 >Used for HTTP communication between external clients and services.
 >#### gRPC:
 >For efficient communication between the User Service and Recommendations/ Discussions Service.
->#### WebSocket (Socket.io):
+>#### WebSocket:
 >For real-time, bi-directional communication in the Discussions Service.
 
 ## Data Management Design
@@ -248,6 +251,4 @@ Manages car recommendations and real-time discussions between users.
 #### Containerization: 
 Usage of Docker.
 #### Orchestration: 
-Kubernetes to manage deployment, scale services based on traffic, and ensure high availability.
-#### Scaling Strategy: 
-The discussion service can scale horizontally based on the number of active users and chats. Other services can scale independently based on their load.
+Docker Compose to manage deployment, scale services based on traffic, and ensure high availability.
