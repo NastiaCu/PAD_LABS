@@ -1,0 +1,8 @@
+venv/
+.env
+pg_hba.conf
+node_modules/
+__init__.py
+dump.rdb
+package-lock.json
+package.json
