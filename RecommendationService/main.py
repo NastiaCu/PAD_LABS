@@ -87,30 +87,48 @@ def delete_post(post_id: int, db: Session = Depends(get_db)):
     
     return {"message": "Post deleted successfully"}
 
-@app.websocket("/ws/api/posts/{post_id}/comments")
-async def websocket_endpoint(websocket: WebSocket, post_id: int, db: Session = Depends(get_db)):
+@app.websocket("/ws/api/comments")
+async def websocket_endpoint(websocket: WebSocket):
     await ws_manager.connect(websocket)
     try:
         while True:
             data = await websocket.receive_text()
             comment_data = json.loads(data)
-            user_id = comment_data.get("user_id")
-            content = comment_data.get("content")
-
-            if not user_id or not content:
-                await websocket.send_text("Invalid comment format. Missing user_id or content.")
-                continue
-
-            new_comment = models.Comment(comment_text=content, user_id=user_id, post_id=post_id)
-            db.add(new_comment)
-            db.commit()
-            db.refresh(new_comment)
-
-            await ws_manager.broadcast(f"Post {post_id}: {content} by user {user_id}")
+            
+            print(f"Publishing to Redis: {comment_data}")
+            
+            redis_client.publish("comments_channel", json.dumps(comment_data))
+            
+            await ws_manager.broadcast(f"New comment: {comment_data['content']} by user {comment_data['user_id']}")
     except Exception as e:
         await ws_manager.disconnect(websocket)
+
+def redis_comment_listener():
+    pubsub = redis_client.pubsub()
+    pubsub.subscribe("comments_channel")
+    
+    for message in pubsub.listen():
+        if message and message['type'] == 'message':
+            print(f"New message from Redis: {message['data']}")
+
+listener_thread = threading.Thread(target=redis_comment_listener)
+listener_thread.daemon = True
+listener_thread.start()
 
 # Service status
 @app.get("/status")
 def status():
     return {"status": "Post service is running"}
+
+
+@app.get("/process")
+async def process_data():
+    try:
+        result = await asyncio.wait_for(some_long_task(), timeout=5)
+        return {"result": result}
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=408, detail="Request Timeout")
+        
+async def some_long_task():
+    await asyncio.sleep(10)
+    return "Task Completed"

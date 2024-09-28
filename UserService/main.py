@@ -121,3 +121,13 @@ def create_post_for_user(user_id: int, post: schemas.PostCreate, db: Session = D
 @app.get("/status")
 def status():
     return {"status": "User service is running"}
+
+concurrent_tasks_semaphore = asyncio.Semaphore(2)
+
+@app.get("/process")
+async def process_data():
+    async with concurrent_tasks_semaphore:
+        print("Task started")
+        await asyncio.sleep(5)
+        print("Task completed")
+        return {"message": "Task completed"}
