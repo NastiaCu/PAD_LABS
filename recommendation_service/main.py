@@ -12,7 +12,7 @@ import threading
 import redis
 
 # Redis setup
-redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)
+redis_client = redis.Redis(host="redis", port=6379, decode_responses=True)
 
 def redis_comment_listener():
     pubsub = redis_client.pubsub()
@@ -41,10 +41,15 @@ def get_db():
     finally:
         db.close()
 
-# Create a new car recommendation post.
 @app.post("/api/posts/", response_model=schemas.Post)
-def create_post(post: schemas.PostCreate, db: Session = Depends(get_db)):
-    return crud.create_post(db=db, post=post)
+async def create_post(post: schemas.PostCreate, db: Session = Depends(get_db)):
+    try:
+        result = await asyncio.wait_for(crud.create_post_async(db, post), timeout=3)
+        return result
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=408, detail="Task Timeout: The request took too long to process.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Retrieve all car recommendations.
 @app.get("/api/posts")
@@ -103,32 +108,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         await ws_manager.disconnect(websocket)
 
-def redis_comment_listener():
-    pubsub = redis_client.pubsub()
-    pubsub.subscribe("comments_channel")
-    
-    for message in pubsub.listen():
-        if message and message['type'] == 'message':
-            print(f"New message from Redis: {message['data']}")
-
-listener_thread = threading.Thread(target=redis_comment_listener)
-listener_thread.daemon = True
-listener_thread.start()
-
 # Service status
 @app.get("/status")
 def status():
     return {"status": "Post service is running"}
-
-
-@app.get("/process")
-async def process_data():
-    try:
-        result = await asyncio.wait_for(some_long_task(), timeout=5)
-        return {"result": result}
-    except asyncio.TimeoutError:
-        raise HTTPException(status_code=408, detail="Request Timeout")
-        
-async def some_long_task():
-    await asyncio.sleep(10)
-    return "Task Completed"

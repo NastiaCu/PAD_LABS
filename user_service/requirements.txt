@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+databases
+sqlalchemy
+psycopg2-binary
+passlib[bcrypt]
+python-jose
+requests
+bcrypt==3.2.0
