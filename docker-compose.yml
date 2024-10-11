@@ -47,8 +47,7 @@ services:
 
   user_service:
     build: ./user_service
-    container_name: user_service
-    ports:
+    expose:
       - "8000:8000"
     depends_on:
       consul:
@@ -61,6 +60,8 @@ services:
       DATABASE_URL: postgres://postgres:1111@postgres:5432/userdb
     networks:
       - my-network
+    deploy:
+      replicas: 3
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/status"]
       interval: 10s
@@ -69,8 +70,7 @@ services:
 
   recommendation_service:
     build: ./recommendation_service
-    container_name: recommendation_service
-    ports:
+    expose:
       - "8001:8000"
     depends_on:
       consul:
@@ -83,6 +83,8 @@ services:
       DATABASE_URL: postgres://postgres:1111@postgres:5432/postdb
     networks:
       - my-network
+    deploy:
+      replicas: 3
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/status"]
       interval: 10s

@@ -6,8 +6,11 @@ import auth
 import requests 
 import asyncio
 import consul
+import os
 
 semaphore = asyncio.Semaphore(10)
+
+INSTANCE_ID = os.environ.get('INSTANCE_ID', '1')
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -138,7 +141,7 @@ def create_post_for_user(user_id: int, post: schemas.PostCreate, db: Session = D
 # Service status
 @app.get("/status")
 def status():
-    return {"status": "User service is running"}
+    return {"status": f"User service instance {INSTANCE_ID} is running"}
 
 concurrent_tasks_semaphore = asyncio.Semaphore(2)
 

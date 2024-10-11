@@ -10,6 +10,9 @@ import asyncio
 import threading
 import redis
 import consul
+import os
+
+INSTANCE_ID = os.environ.get('INSTANCE_ID', '1')
 
 redis_client = redis.Redis(host="redis", port=6379, decode_responses=True)
 
@@ -127,4 +130,4 @@ async def websocket_endpoint(websocket: WebSocket):
 # Service status
 @app.get("/status")
 def status():
-    return {"status": "Post service is running"}
+    return {"status": f"Post service instance {INSTANCE_ID} is running"}
