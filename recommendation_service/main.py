@@ -7,11 +7,10 @@ from websocket_manager import WebSocketManager
 import schemas
 import json
 import asyncio
-
 import threading
 import redis
+import consul
 
-# Redis setup
 redis_client = redis.Redis(host="redis", port=6379, decode_responses=True)
 
 def redis_comment_listener():
@@ -34,6 +33,23 @@ ws_manager = WebSocketManager()
 
 semaphore = asyncio.Semaphore(10)
 
+def register_with_consul():
+    c = consul.Consul(host='consul', port=8500)
+    service_id = 'recommendation-service'
+
+    c.agent.service.register(
+        name='recommendation-service',
+        service_id=service_id,
+        address='recommendation_service',
+        port=8001,
+        tags=["posts"]
+    )
+    print(f"Registered recommendation-service with Consul as {service_id}")
+
+@app.on_event("startup")
+async def startup_event():
+    register_with_consul()
+
 def get_db():
     db = SessionLocal()
     try:
@@ -51,7 +67,7 @@ async def create_post(post: schemas.PostCreate, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Retrieve all car recommendations.
+# Retrieve all posts.
 @app.get("/api/posts")
 async def get_posts(db: Session = Depends(get_db)):
     async with semaphore:

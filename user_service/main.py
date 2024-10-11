@@ -5,12 +5,30 @@ from database import SessionLocal, engine
 import auth
 import requests 
 import asyncio
+import consul
 
 semaphore = asyncio.Semaphore(10)
 
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+def register_with_consul():
+    c = consul.Consul(host='consul', port=8500)
+    service_id = 'user-service'
+
+    c.agent.service.register(
+        name='user-service',
+        service_id=service_id,
+        address='user_service',
+        port=8000,
+        tags=["users"]
+    )
+    print(f"Registered user-service with Consul as {service_id}")
+
+@app.on_event("startup")
+async def startup_event():
+    register_with_consul()
 
 def get_db():
     db = SessionLocal()
