@@ -48,7 +48,8 @@ services:
   user_service:
     build: ./user_service
     expose:
-      - "8000:8000"
+      - "50051"
+      - "8000"
     depends_on:
       consul:
         condition: service_healthy

@@ -9,3 +9,4 @@ requests
 bcrypt==3.2.0
 python-consul
 pytest
+grpc

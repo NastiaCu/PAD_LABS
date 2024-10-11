@@ -1,30 +1,39 @@
 const express = require('express');
 const axios = require('axios');
-const { createProxyMiddleware } = require('http-proxy-middleware');
 const CircuitBreaker = require('opossum');
+const grpc = require('@grpc/grpc-js');
+const protoLoader = require('@grpc/proto-loader');
 
 const app = express();
 
-const CONSUL_HOST = process.env.CONSUL_HOST || 'consul';
-const CONSUL_PORT = process.env.CONSUL_PORT || 8500;
-const CONSUL_URL = `http://${CONSUL_HOST}:${CONSUL_PORT}`;
+let requestCount = 0;
+const REQUEST_LIMIT = 5;
+const requestWindow = 100;
 
-const GATEWAY_SERVICE = {
-    name: 'gateway',
-    address: 'gateway',
-    port: 3000,
-    tags: ['api-gateway']
+setInterval(() => {
+    console.log(`Checking load: ${requestCount} requests`);
+    if (requestCount > REQUEST_LIMIT) {
+        console.log(`ALERT: High request load detected! (${requestCount} requests per second)`);
+    }
+    requestCount = 0;
+}, requestWindow);
+
+const increaseRequestCount = () => {
+    requestCount += 1;
+    console.log(`Request count increased: ${requestCount}`);
 };
+
 
 const breakerOptions = {
     timeout: 5000,
     errorThresholdPercentage: 50,
     resetTimeout: 30000,
-    rollingCountTimeout: 10000,
-    rollingCountBuckets: 10,
 };
 
-const retryLimit = 3;
+const PROTO_PATH = './user.proto';
+const packageDefinition = protoLoader.loadSync(PROTO_PATH, {});
+const userProto = grpc.loadPackageDefinition(packageDefinition).user;
+const grpcClient = new userProto.UserService('user_service:50051', grpc.credentials.createInsecure());
 
 const breaker = new CircuitBreaker(async (url) => {
     return await axios.get(url);
@@ -35,31 +44,23 @@ breaker.on('open', () => {
 });
 
 const registerGatewayWithConsul = async () => {
+    const CONSUL_HOST = process.env.CONSUL_HOST || 'consul';
+    const CONSUL_PORT = process.env.CONSUL_PORT || 8500;
+    const CONSUL_URL = `http://${CONSUL_HOST}:${CONSUL_PORT}`;
+
     try {
         const registerUrl = `${CONSUL_URL}/v1/agent/service/register`;
         const serviceDefinition = {
-            Name: GATEWAY_SERVICE.name,
-            ID: GATEWAY_SERVICE.name,
-            Address: GATEWAY_SERVICE.address,
-            Port: GATEWAY_SERVICE.port,
-            Tags: GATEWAY_SERVICE.tags,
+            Name: 'gateway',
+            ID: 'gateway',
+            Address: 'gateway',
+            Port: 3000,
+            Tags: ['api-gateway'],
         };
         await axios.put(registerUrl, serviceDefinition);
         console.log('Gateway registered with Consul');
     } catch (error) {
         console.error('Failed to register gateway with Consul:', error.message);
-    }
-};
-
-const getServiceInstances = async (serviceName) => {
-    try {
-        const servicesUrl = `${CONSUL_URL}/v1/agent/services`;
-        const response = await axios.get(servicesUrl);
-        const services = response.data;
-        return Object.values(services).filter(s => s.Service === serviceName);
-    } catch (error) {
-        console.error('Error fetching services from Consul:', error.message);
-        return [];
     }
 };
 
@@ -75,40 +76,39 @@ const retryRequest = async (url, retries) => {
             attempt += 1;
         }
     }
-    throw new Error('Service unavailable after 3 retries');
+    throw new Error('Service unavailable after retries');
 };
 
-app.use('/api/users', async (req, res, next) => {
-    const instances = await getServiceInstances('user-service');
-    if (!instances.length) {
-        return res.status(503).json({ error: 'User service unavailable' });
-    }
-
-    const userServiceUrl = `http://${instances[0].Address}:${instances[0].Port}${req.originalUrl}`;
-
-    try {
-        await retryRequest(userServiceUrl, retryLimit);
-        createProxyMiddleware({
-            target: `http://${instances[0].Address}:${instances[0].Port}`,
-            changeOrigin: true,
-            pathRewrite: { '^/api/users': '' },
-        })(req, res, next);
-    } catch (error) {
-        console.error('Circuit breaker tripped: Service unavailable');
-        res.status(500).json({ error: 'Service unavailable' });
-    }
+app.use('/api/users', async (req, res) => {
+    increaseRequestCount();
+    grpcClient.GetUserStatus({ user_id: '1' }, (error, response) => {
+        if (!error) {
+            res.json({ status: response.status });
+        } else {
+            console.error('gRPC call failed:', error);
+            res.status(500).json({ error: 'gRPC call failed' });
+        }
+    });
 });
 
 app.use('/api/posts', async (req, res, next) => {
-    const instances = await getServiceInstances('recommendation-service');
-    if (!instances.length) {
-        return res.status(503).json({ error: 'Recommendation service unavailable' });
-    }
-
-    const postServiceUrl = `http://${instances[0].Address}:${instances[0].Port}${req.originalUrl}`;
+    const CONSUL_HOST = process.env.CONSUL_HOST || 'consul';
+    const CONSUL_PORT = process.env.CONSUL_PORT || 8500;
+    const CONSUL_URL = `http://${CONSUL_HOST}:${CONSUL_PORT}`;
 
     try {
-        await retryRequest(postServiceUrl, retryLimit);
+        const servicesUrl = `${CONSUL_URL}/v1/agent/services`;
+        const response = await axios.get(servicesUrl);
+        const services = response.data;
+
+        const instances = Object.values(services).filter(s => s.Service === 'recommendation-service');
+        if (!instances.length) {
+            return res.status(503).json({ error: 'Recommendation service unavailable' });
+        }
+
+        const postServiceUrl = `http://${instances[0].Address}:${instances[0].Port}${req.originalUrl}`;
+        await retryRequest(postServiceUrl, 3);
+
         createProxyMiddleware({
             target: `http://${instances[0].Address}:${instances[0].Port}`,
             changeOrigin: true,
@@ -121,11 +121,19 @@ app.use('/api/posts', async (req, res, next) => {
 });
 
 app.get('/status', async (req, res) => {
+    const CONSUL_HOST = process.env.CONSUL_HOST || 'consul';
+    const CONSUL_PORT = process.env.CONSUL_PORT || 8500;
+    const CONSUL_URL = `http://${CONSUL_HOST}:${CONSUL_PORT}`;
+
     try {
         const servicesUrl = `${CONSUL_URL}/v1/agent/services`;
         const response = await axios.get(servicesUrl);
         const services = response.data;
-        res.json({ status: 'Gateway is running', services: Object.keys(services) });
+
+        res.json({
+            status: 'Gateway is running',
+            services: Object.keys(services),
+        });
     } catch (error) {
         res.status(500).json({ error: 'Error fetching services from Consul', details: error.message });
     }
@@ -133,7 +141,7 @@ app.get('/status', async (req, res) => {
 
 registerGatewayWithConsul();
 
-const PORT = GATEWAY_SERVICE.port || 3000;
+const PORT = 3000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`API Gateway running on port ${PORT}`);
 });
