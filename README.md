@@ -1,5 +1,21 @@
 # Car recommendations and discussions platform
 
+## Runnind and Deploying the project
+In order to run the project, it is necessary to have installed and running Docker application.
+
+After that it is necessary to run the following commands:
+```
+docker-compose build
+docker-compose up
+```
+**Troubleshooting:**
+
+Below are presented the commands which can help if any port is occupied:
+
+``` sudo lsof -i -P -n | grep <PORT> ```
+
+``` sudo kill -9 <PID> ```
+
 ## Application Suitability:
 
 A platform where users can share car recommendations, reviews, and engage in discussions about different models, maintenance, and news is a good choise for microservices usage because the functionality can be separated and work independently. It can also have features for subscribing to car-related topics or participating in group discussions about specific car models or maintenance tips.
@@ -86,11 +102,11 @@ Manages car recommendations and real-time discussions between users.
 ##### Response:
 ```json
 {
-  "user_id": "int",
-  "message": "User registered successfully."
+    "name": "string",
+    "email": "string",
+    "id": "int"
 }
 ```
-
 
 2. ```POST /api/users/login``` - Authenticate user and issue JWT.
 
@@ -104,24 +120,18 @@ Manages car recommendations and real-time discussions between users.
 ##### Response:
 ```json
 {
-  "token": "string",
-  "user_id": "int"
+  "token": "string"
 }
 ```
-
 
 3. ```GET /api/users/me``` - Get authenticated user's profile.
 
 ##### Response:
 ```json
 {
-  "user_id": "int",
   "name": "string",
   "email": "string",
-  "profile": {
-    "bio": "string",
-    "avatar_url": "string"
-  }
+  "id": "int"
 }
 ```
 
@@ -145,13 +155,9 @@ Manages car recommendations and real-time discussions between users.
 ##### Response:
 ```json
 {
-  "user_id": "int",
   "name": "string",
   "email": "string",
-  "profile": {
-    "bio": "string",
-    "avatar_url": "string"
-  }
+  "id": "int"
 }
 ```
 ### Recommendation/Discussion Service:
@@ -170,8 +176,12 @@ Manages car recommendations and real-time discussions between users.
 ##### Response:
 ```json
 {
-  "post_id": "string",
-  "message": "Post created successfully."
+    "id": "int",
+    "title": "string",
+    "content": "string",
+    "car_model": "string",
+    "user_id": "int",
+    "comments": []
 }
 ```
 
@@ -180,12 +190,11 @@ Manages car recommendations and real-time discussions between users.
 ```json
 [
   {
-    "post_id": "string",
-    "user_id": "int",
-    "title": "string",
-    "content": "string",
+    "id": "int",
     "car_model": "string",
-    "timestamp": "string"
+    "user_id": "int",
+    "content": "string",
+    "title": "string"
   }
 ]
 ```
@@ -194,30 +203,23 @@ Manages car recommendations and real-time discussions between users.
 ##### Response:
 ```json
 {
-  "post_id": "string",
-  "user_id": "int",
-  "title": "string",
-  "content": "string",
-  "car_model": "string",
-  "timestamp": "string",
-  "comments": [
-    {
-      "comment_id": "string",
-      "user_id": "int",
-      "comment_text": "string",
-      "timestamp": "string"
-    }
-  ]
+    "id": "int",
+    "title": "string",
+    "content": "string",
+    "car_model": "string",
+    "user_id": "int",
+    "comments": []
 }
 ```
 
-4. ```PUT /api/posts/{post_id}``` - Update a specific post.
+4. ```PUT /api/posts/{post_id}``` - Update a specific post by ID.
 ##### Data:
 ```json
 {
   "title": "string",
   "content": "string",
-  "car_model": "string"
+  "car_model": "string",
+  "user_id": "int"
 }
 ```
 ##### Response:
@@ -227,7 +229,7 @@ Manages car recommendations and real-time discussions between users.
 }
 ```
 
-5. ```DELETE /api/posts/{post_id}``` - Update a specific post.
+5. ```DELETE /api/posts/{post_id}``` - Delete a specific post by ID.
 ##### Response:
 ```json
 {
@@ -235,14 +237,12 @@ Manages car recommendations and real-time discussions between users.
 }
 ```
 
-6. ```WebSocket /ws/posts/{post_id}/comments``` - Real-time updates for comments on a post.
+6. ```WebSocket ws://localhost:3000/ws/api/comments``` - Real-time updates for comments on a post.
 ##### Data:
 ```json
 {
-  "comment_id": "string",
-  "user_id": "int",
-  "comment_text": "string",
-  "timestamp": "string"
+  "content": "string",
+  "user_id": "int"
 }
 ```
 

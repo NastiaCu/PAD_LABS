@@ -72,7 +72,7 @@ services:
   recommendation_service:
     build: ./recommendation_service
     expose:
-      - "8001:8000"
+      - "8001"
     depends_on:
       consul:
         condition: service_healthy
@@ -106,6 +106,8 @@ services:
     environment:
       CONSUL_HOST: 'consul'
       CONSUL_PORT: 8500
+      RECOMMENDATION_SERVICE_URL: http://recommendation_service:8001
+      USER_SERVICE_URL: http://user_service:8000
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/status"]
       interval: 10s

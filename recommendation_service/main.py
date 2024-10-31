@@ -73,9 +73,8 @@ async def create_post(post: schemas.PostCreate, db: Session = Depends(get_db)):
 # Retrieve all posts.
 @app.get("/api/posts")
 async def get_posts(db: Session = Depends(get_db)):
-    async with semaphore:
-        posts = db.query(models.Post).all()
-        return posts
+    posts = db.query(models.Post).all()
+    return posts
 
 # Retrieve a specific post by ID.
 @app.get("/api/posts/{post_id}", response_model=schemas.Post)

@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 RUN apk --no-cache add curl
-RUN npm install @grpc/grpc-js @grpc/proto-loader opossum axios
+RUN npm install @grpc/grpc-js @grpc/proto-loader opossum axios wscat http-proxy-middleware
 
 COPY . .
 

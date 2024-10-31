@@ -1,10 +1,22 @@
+require('dotenv').config();
 const express = require('express');
+const proxy = require('express-http-proxy');
 const axios = require('axios');
 const CircuitBreaker = require('opossum');
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
+const { createProxyMiddleware } = require('http-proxy-middleware');
+
 
 const app = express();
+app.use(express.json());
+
+const userServiceUrl = process.env.USER_SERVICE_URL;
+const recommendationServiceUrl = process.env.RECOMMENDATION_SERVICE_URL;
+
+if (!userServiceUrl || !recommendationServiceUrl) {
+    throw new Error('USER_SERVICE_URL or RECOMMENDATION_SERVICE_URL is not defined');
+}
 
 let requestCount = 0;
 const REQUEST_LIMIT = 5;
@@ -23,17 +35,11 @@ const increaseRequestCount = () => {
     console.log(`Request count increased: ${requestCount}`);
 };
 
-
 const breakerOptions = {
     timeout: 5000,
     errorThresholdPercentage: 50,
     resetTimeout: 30000,
 };
-
-const PROTO_PATH = './user.proto';
-const packageDefinition = protoLoader.loadSync(PROTO_PATH, {});
-const userProto = grpc.loadPackageDefinition(packageDefinition).user;
-const grpcClient = new userProto.UserService('user_service:50051', grpc.credentials.createInsecure());
 
 const breaker = new CircuitBreaker(async (url) => {
     return await axios.get(url);
@@ -42,6 +48,11 @@ const breaker = new CircuitBreaker(async (url) => {
 breaker.on('open', () => {
     console.log('Circuit breaker tripped! Too many failures (3 consecutive failures).');
 });
+
+const PROTO_PATH = './user.proto';
+const packageDefinition = protoLoader.loadSync(PROTO_PATH, {});
+const userProto = grpc.loadPackageDefinition(packageDefinition).user;
+const grpcClient = new userProto.UserService('user_service:50051', grpc.credentials.createInsecure());
 
 const registerGatewayWithConsul = async () => {
     const CONSUL_HOST = process.env.CONSUL_HOST || 'consul';
@@ -79,46 +90,37 @@ const retryRequest = async (url, retries) => {
     throw new Error('Service unavailable after retries');
 };
 
-app.use('/api/users', async (req, res) => {
-    increaseRequestCount();
-    grpcClient.GetUserStatus({ user_id: '1' }, (error, response) => {
-        if (!error) {
-            res.json({ status: response.status });
-        } else {
-            console.error('gRPC call failed:', error);
-            res.status(500).json({ error: 'gRPC call failed' });
-        }
-    });
-});
-
-app.use('/api/posts', async (req, res, next) => {
-    const CONSUL_HOST = process.env.CONSUL_HOST || 'consul';
-    const CONSUL_PORT = process.env.CONSUL_PORT || 8500;
-    const CONSUL_URL = `http://${CONSUL_HOST}:${CONSUL_PORT}`;
-
-    try {
-        const servicesUrl = `${CONSUL_URL}/v1/agent/services`;
-        const response = await axios.get(servicesUrl);
-        const services = response.data;
-
-        const instances = Object.values(services).filter(s => s.Service === 'recommendation-service');
-        if (!instances.length) {
-            return res.status(503).json({ error: 'Recommendation service unavailable' });
-        }
-
-        const postServiceUrl = `http://${instances[0].Address}:${instances[0].Port}${req.originalUrl}`;
-        await retryRequest(postServiceUrl, 3);
-
-        createProxyMiddleware({
-            target: `http://${instances[0].Address}:${instances[0].Port}`,
-            changeOrigin: true,
-            pathRewrite: { '^/api/posts': '' },
-        })(req, res, next);
-    } catch (error) {
-        console.error('Circuit breaker tripped: Service unavailable');
-        res.status(500).json({ error: 'Service unavailable' });
+app.use('/api/users', proxy(userServiceUrl, {
+    proxyReqPathResolver: function (req) {
+        return '/api/users' + req.url;  
     }
-});
+}));
+
+app.use('/api/posts', proxy(recommendationServiceUrl, {
+    proxyReqOptDecorator: (proxyReqOpts, srcReq) => {
+        proxyReqOpts.followRedirects = false;
+        return proxyReqOpts;
+    },
+    skipToNextHandlerFilter: (proxyRes) => {
+        return proxyRes.statusCode === 307;
+    },
+    proxyReqPathResolver: function (req) {
+        if (req.method === 'GET' && req.url === '/') {
+            return '/api/posts';
+        }
+        return '/api/posts' + req.url;
+    }
+}));
+
+app.use(
+    '/ws/api/comments',
+    createProxyMiddleware({
+        target: process.env.RECOMMENDATION_SERVICE_URL,
+        changeOrigin: true,
+        ws: true,
+        pathRewrite: { '^/ws/api/comments': '/ws/api/comments' }
+    })
+);
 
 app.get('/status', async (req, res) => {
     const CONSUL_HOST = process.env.CONSUL_HOST || 'consul';
