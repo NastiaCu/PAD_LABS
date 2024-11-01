@@ -16,6 +16,10 @@ Below are presented the commands which can help if any port is occupied:
 
 ``` sudo kill -9 <PID> ```
 
+To run the test use the following command:
+
+```docker-compose run -e RUN_TESTS=1 user_service```
+
 ## Application Suitability:
 
 A platform where users can share car recommendations, reviews, and engage in discussions about different models, maintenance, and news is a good choise for microservices usage because the functionality can be separated and work independently. It can also have features for subscribing to car-related topics or participating in group discussions about specific car models or maintenance tips.
@@ -90,6 +94,8 @@ Manages car recommendations and real-time discussions between users.
 #### Endpoints:
 
 1. ```POST /api/users/register``` - Register a new user.
+   
+This is the first endpoint that should be requested, as if not, the login request won't work.
 
 ##### Data:
 ```json
@@ -108,7 +114,9 @@ Manages car recommendations and real-time discussions between users.
 }
 ```
 
-2. ```POST /api/users/login``` - Authenticate user and issue JWT.
+2. ```POST /api/users/login``` - Authenticate user and issue JWT. 
+  
+This is the second endpoint needed, as it generates the JWT token, which is necessary for testing other endpoints.
 
 ##### Data:
 ```json
@@ -124,7 +132,7 @@ Manages car recommendations and real-time discussions between users.
 }
 ```
 
-3. ```GET /api/users/me``` - Get authenticated user's profile.
+3. ```GET /api/users/me``` - Get authenticated user's profile. Requires JWT token.
 
 ##### Response:
 ```json
@@ -135,7 +143,7 @@ Manages car recommendations and real-time discussions between users.
 }
 ```
 
-4. ```PUT /api/users/me``` - Update the authenticated user's profile.
+4. ```PUT /api/users/me``` - Update the authenticated user's profile. Requires JWT token.
 ##### Data:
 ```json
 {
@@ -163,7 +171,9 @@ Manages car recommendations and real-time discussions between users.
 ### Recommendation/Discussion Service:
 #### Endpoints:
 
-1. ```POST /api/posts``` - Create a new car recommendation post.
+1. ```POST /api/posts``` - Create a new car recommendation post. 
+
+This endpoint is the first one in the testing process. After that all other endpoints can be tested.
 ##### Data:
 ```json
 {
@@ -185,7 +195,7 @@ Manages car recommendations and real-time discussions between users.
 }
 ```
 
-2. ```GET /api/posts``` - Retrieve all car recommendations.
+1. ```GET /api/posts``` - Retrieve all car recommendations.
 ##### Response:
 ```json
 [
@@ -199,7 +209,7 @@ Manages car recommendations and real-time discussions between users.
 ]
 ```
 
-3. ```GET /api/posts/{post_id}``` - Retrieve a specific post by ID.
+1. ```GET /api/posts/{post_id}``` - Retrieve a specific post by ID.
 ##### Response:
 ```json
 {
@@ -212,7 +222,7 @@ Manages car recommendations and real-time discussions between users.
 }
 ```
 
-4. ```PUT /api/posts/{post_id}``` - Update a specific post by ID.
+1. ```PUT /api/posts/{post_id}``` - Update a specific post by ID.
 ##### Data:
 ```json
 {
@@ -229,7 +239,7 @@ Manages car recommendations and real-time discussions between users.
 }
 ```
 
-5. ```DELETE /api/posts/{post_id}``` - Delete a specific post by ID.
+1. ```DELETE /api/posts/{post_id}``` - Delete a specific post by ID.
 ##### Response:
 ```json
 {
@@ -237,7 +247,7 @@ Manages car recommendations and real-time discussions between users.
 }
 ```
 
-6. ```WebSocket ws://localhost:3000/ws/api/comments``` - Real-time updates for comments on a post.
+1. ```WebSocket ws://localhost:3000/ws/api/comments``` - Real-time updates for comments on a post.
 ##### Data:
 ```json
 {
