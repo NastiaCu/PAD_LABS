@@ -251,3 +251,31 @@ Manages car recommendations and real-time discussions between users.
 Usage of Docker.
 #### Orchestration: 
 Docker Compose to manage deployment, scale services based on traffic, and ensure high availability.
+
+### Updated System Architecture Diagram:
+![alt text](UpdatedScheme.png)
+
+The above diagram represents the updated project with addition of new components, which help to improve the project.
+The new components are the following:
+1. **Transaction Coordinator or Saga Coordinator:**
+   
+   These are needed to orchestrate 2PC transactions (for transaction coordinator) and to handle long running transactions (for saga coordinator)
+
+2. **Database replication:** 
+   
+   For the User service are added DB replicas, where we have one Master DB and two Slave DBs.
+
+3. **ELK Stack:**
+   
+   It is needed for logging and monitoring. It implies three components:
+   1. **Logstash** - Responsible for aggregating and processing log data from all services (API Gateway, User Service, Post Service, Redis, etc.). It acts as the pipeline for collecting logs.
+   2. **Elasticsearch** - Serves as the indexing and storage engine for logs. All logs processed by Logstash are stored in Elasticsearch, allowing fast searches and complex queries on the data.
+   3. **Kibana** - Provides visualization and analysis tools for the logs stored in Elasticsearch. Kibana is used to create dashboards and alerts for monitoring key metrics.
+
+4. **Consistent Hashing for Redis cache:**
+   
+   Redis is set up with consistent hashing to distribute cache data evenly across nodes, which ensures balanced load distribution and minimizes data movement when scaling. It is configured as an HA Cluster. This ensures that even if one node fails, others can continue to serve cached data, supporting system resilience.
+
+5. **Data Warehouse:**
+   
+   A staging area aggregates data from the User DB and Post DB replicas. The Data Warehouse serves as a consolidated data repository for historical data and analysis.
