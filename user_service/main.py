@@ -105,6 +105,14 @@ def get_user_by_id(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
+@app.delete("/api/users/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(get_db)):
+    user = models.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    models.delete_user(db, user_id)
+    return {"message": "User deleted successfully"}
+
 @app.get("/status")
 def status():
     return {"status": f"User service instance {INSTANCE_ID} is running"}

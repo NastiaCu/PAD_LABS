@@ -99,6 +99,7 @@ services:
       - user_service
       - recommendation_service
       - consul
+      - sagadb
     ports:
       - "3000:3000"
     networks:
@@ -108,8 +109,27 @@ services:
       CONSUL_PORT: 8500
       RECOMMENDATION_SERVICE_URL: http://recommendation_service:8001
       USER_SERVICE_URL: http://user_service:8000
+      SAGA_DB_URL: postgres://postgres:1111@sagadb:5432/sagadb
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sagadb:
+    image: postgres:13
+    container_name: sagadb
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1111
+    volumes:
+      - ./db-init:/docker-entrypoint-initdb.d
+    ports:
+      - "5433:5432"
+    networks:
+      - my-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5

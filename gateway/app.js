@@ -7,12 +7,126 @@ const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const { v4: uuidv4 } = require('uuid'); 
+const client = require('prom-client');
+const { Client } = require('pg');
 
 const app = express();
 app.use(express.json());
 
+const collectDefaultMetrics = client.collectDefaultMetrics;
+collectDefaultMetrics(); 
+
+const httpRequestsTotal = new client.Counter({
+    name: 'http_requests_total',
+    help: 'Total number of HTTP requests',
+    labelNames: ['method', 'route'],
+  });
+
+
+app.use((req, res, next) => {
+    httpRequestsTotal.inc({ method: req.method, route: req.route?.path || 'unknown' });
+    next();
+  });
+
+app.get('/metrics', (req, res) => {
+    try {
+      const metrics = client.register.metrics();  
+      console.log('Metrics collected:', metrics); 
+  
+      res.set('Content-Type', client.register.contentType);
+      res.send(metrics);  
+    } catch (error) {
+      console.error('Error while exposing metrics:', error);
+      res.status(500).send('Internal Server Error');
+    }
+  });
+  
 const userServiceUrl = process.env.USER_SERVICE_URL;
 const recommendationServiceUrl = process.env.RECOMMENDATION_SERVICE_URL;
+const sagaDbClient = new Client({
+    connectionString: process.env.SAGA_DB_URL,
+});
+
+sagaDbClient.connect()
+    .then(() => {
+        console.log('Connected to saga database');
+    })
+    .catch(err => {
+        console.error('Error connecting to saga database', err);
+    });
+
+async function createSagaTransaction(sagaId) {
+    const query = 'INSERT INTO saga_transactions (saga_id, status) VALUES ($1, $2) RETURNING *';
+    try {
+        const res = await sagaDbClient.query(query, [sagaId, 'Started']);
+        return res.rows[0];
+    } catch (err) {
+        console.error('Error creating saga transaction', err);
+        throw err;
+    }
+}
+
+async function updateSagaTransaction(sagaId, status) {
+    const query = 'UPDATE saga_transactions SET status = $1 WHERE saga_id = $2 RETURNING *';
+    try {
+        const res = await sagaDbClient.query(query, [status, sagaId]);
+        console.log(`Saga transaction updated: ${res.rows[0].status}`);
+        return res.rows[0];
+    } catch (err) {
+        console.error('Error updating saga transaction', err);
+        throw err;
+    }
+}
+
+async function compensate(sagaId, userId, postId) {
+    console.log(`Compensating for saga ${sagaId}...`);
+    try {
+        if (userId) {
+            console.log(`Deleting user with ID ${userId}`);
+            await axios.delete(`${process.env.USER_SERVICE_URL}/api/users/${userId}`);
+        }
+
+        if (postId) {
+            console.log(`Deleting post with ID ${postId}`);
+            await axios.delete(`${process.env.RECOMMENDATION_SERVICE_URL}/api/posts/${postId}`);
+        }
+
+        await updateSagaTransaction(sagaId, 'Failed');
+    } catch (err) {
+        console.error('Error during compensation:', err);
+    }
+}
+
+app.post('/api/saga/create', async (req, res) => {
+    const { userData, postData } = req.body;
+    const sagaId = uuidv4();
+    let userId = null;
+    let postId = null;
+
+    try {
+        const saga = await createSagaTransaction(sagaId);
+
+        const userResponse = await axios.post(`${process.env.USER_SERVICE_URL}/api/users/register`, userData);
+        userId = userResponse.data.id;
+
+        const postResponse = await axios.post(`${process.env.RECOMMENDATION_SERVICE_URL}/api/posts/`, postData);
+        postId = postResponse.data.id;
+
+        await updateSagaTransaction(sagaId, 'Completed');
+
+        res.status(200).json({
+            message: 'Saga completed successfully',
+            sagaId,
+            userId,
+            postId,
+        });
+    } catch (error) {
+        console.error('Saga creation failed:', error);
+
+        await compensate(sagaId, userId, postId);
+        res.status(500).json({ error: 'Saga failed, changes have been rolled back' });
+    }
+});
 
 if (!userServiceUrl || !recommendationServiceUrl) {
     throw new Error('USER_SERVICE_URL or RECOMMENDATION_SERVICE_URL is not defined');
@@ -60,7 +174,7 @@ const registerGatewayWithConsul = async () => {
     const CONSUL_HOST = process.env.CONSUL_HOST || 'consul';
     const CONSUL_PORT = process.env.CONSUL_PORT || 8500;
     const CONSUL_URL = `http://${CONSUL_HOST}:${CONSUL_PORT}`;
-    const instanceId = `${"gateway"}-${uuidv4()}`;
+    const instanceId = "gateway";
 
     try {
         const registerUrl = `${CONSUL_URL}/v1/agent/service/register`;
