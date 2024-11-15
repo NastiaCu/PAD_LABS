@@ -11,6 +11,8 @@ import threading
 import redis
 import consul
 import os
+import uuid
+from prometheus_fastapi_instrumentator import Instrumentator
 
 INSTANCE_ID = os.environ.get('INSTANCE_ID', '1')
 
@@ -36,18 +38,21 @@ ws_manager = WebSocketManager()
 
 semaphore = asyncio.Semaphore(10)
 
+instrumentator = Instrumentator()
+instrumentator.instrument(app).expose(app)
+
 def register_with_consul():
     c = consul.Consul(host='consul', port=8500)
-    service_id = 'recommendation-service'
+    instance_uuid = f"recommendation-service-{uuid.uuid4()}"
 
     c.agent.service.register(
         name='recommendation-service',
-        service_id=service_id,
+        service_id=instance_uuid,
         address='recommendation_service',
         port=8001,
         tags=["posts"]
     )
-    print(f"Registered recommendation-service with Consul as {service_id}")
+    print(f"Registered recommendation-service with Consul as {instance_uuid}")
 
 @app.on_event("startup")
 async def startup_event():

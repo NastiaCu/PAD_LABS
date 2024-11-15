@@ -12,3 +12,5 @@ pytest
 grpcio==1.66.2
 grpcio-tools==1.66.2
 httpx
+uuid
+prometheus-fastapi-instrumentator

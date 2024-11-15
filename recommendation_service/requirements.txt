@@ -5,3 +5,5 @@ sqlalchemy
 psycopg2-binary
 redis
 python-consul
+uuid
+prometheus-fastapi-instrumentator

@@ -13,6 +13,8 @@ from concurrent import futures
 import user_pb2
 import user_pb2_grpc
 import threading
+import uuid
+from prometheus_fastapi_instrumentator import Instrumentator
 
 REQUEST_LIMIT = 10
 request_count = 0
@@ -22,17 +24,20 @@ INSTANCE_ID = os.environ.get('INSTANCE_ID', '1')
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI()
 
+instrumentator = Instrumentator()
+instrumentator.instrument(app).expose(app)
+
 def register_with_consul():
     c = consul.Consul(host='consul', port=8500)
-    service_id = 'user-service'
+    instance_uuid = f"user-service-{uuid.uuid4()}"
     c.agent.service.register(
         name='user-service',
-        service_id=service_id,
+        service_id=instance_uuid,
         address='user_service',
         port=8000,
-        tags=["users"]
+        tags=["users"],
     )
-    print(f"Registered user-service with Consul as {service_id}")
+    print(f"Registered user-service with Consul as {instance_uuid}")
 
 @app.on_event("startup")
 async def startup_event():
