@@ -43,12 +43,14 @@ instrumentator.instrument(app).expose(app)
 
 def register_with_consul():
     c = consul.Consul(host='consul', port=8500)
-    instance_uuid = f"recommendation-service-{uuid.uuid4()}"
+    for _ in range(1, 4):
+        instance_uuid = f"recommendation-service-{uuid.uuid4()}"
+        instance_address = f"recommendation-service"
 
     c.agent.service.register(
         name='recommendation-service',
         service_id=instance_uuid,
-        address='recommendation_service',
+        address=instance_address,
         port=8001,
         tags=["posts"]
     )

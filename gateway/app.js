@@ -28,18 +28,19 @@ app.use((req, res, next) => {
     next();
   });
 
-app.get('/metrics', (req, res) => {
+app.get('/metrics', async (req, res) => {
     try {
-      const metrics = client.register.metrics();  
-      console.log('Metrics collected:', metrics); 
-  
-      res.set('Content-Type', client.register.contentType);
-      res.send(metrics);  
+        const metrics = await client.register.metrics();  
+        // console.log('Metrics collected:', metrics);
+
+        res.set('Content-Type', client.register.contentType);
+        res.send(metrics); 
     } catch (error) {
-      console.error('Error while exposing metrics:', error);
-      res.status(500).send('Internal Server Error');
+        console.error('Error while exposing metrics:', error);
+        res.status(500).send('Internal Server Error');
     }
-  });
+});
+
   
 const userServiceUrl = process.env.USER_SERVICE_URL;
 const recommendationServiceUrl = process.env.RECOMMENDATION_SERVICE_URL;
@@ -165,6 +166,19 @@ breaker.on('open', () => {
     console.log('Circuit breaker tripped! Too many failures (3 consecutive failures).');
 });
 
+breaker.on('failure', async (error) => {
+    console.log(`Request failed: ${error.message}`);
+
+    const failedServiceIp = error.config ? error.config.url : 'Unknown URL';
+
+    if (failedServiceIp !== 'Unknown URL') {
+        await deregisterFailedReplica('user-service', failedServiceIp);
+        console.log(`Failed service at ${failedServiceIp} deregistered.`);
+    } else {
+        console.error('Failed to retrieve service URL for deregistration.');
+    }
+});
+
 const PROTO_PATH = './user.proto';
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {});
 const userProto = grpc.loadPackageDefinition(packageDefinition).user;
@@ -199,9 +213,11 @@ const getActiveReplicas = async (serviceName) => {
     
     try {
         const response = await axios.get(CONSUL_URL);
-        return response.data
+        const healthyReplicas = response.data
             .filter(entry => entry.Checks.every(check => check.Status === 'passing'))
             .map(entry => `http://${entry.Service.Address}:${entry.Service.Port}`);
+
+        return healthyReplicas.slice(0, 3);
     } catch (error) {
         console.error(`Failed to fetch replicas for ${serviceName} from Consul:`, error.message);
         return [];
@@ -212,13 +228,15 @@ const sendRequestWithRetries = async (serviceName, endpoint, requestData) => {
     const replicas = await getActiveReplicas(serviceName); 
     for (let replica of replicas) {
         let retries = 0;
+        const url = `${replica}${endpoint}`;
+
         while (retries < MAX_RETRIES) {
             try {
-                const response = await breaker.fire(() => axios.post(`${replica}${endpoint}`, requestData));
+                const response = await breaker.fire(() => axios.post(url, requestData));
                 return response.data;
             } catch (error) {
                 retries += 1;
-                console.log(`Retry ${retries} for ${replica} failed. Retrying...`);
+                console.log(`Retry ${retries} for ${url} failed. Retrying...`);
             }
         }
 
