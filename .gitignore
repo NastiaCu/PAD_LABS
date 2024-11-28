@@ -6,3 +6,4 @@ __init__.py
 dump.rdb
 package-lock.json
 package.json
+redis-cluster.conf

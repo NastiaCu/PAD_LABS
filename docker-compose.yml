@@ -17,18 +17,112 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7.4.1
-    container_name: redis
+  # redis:
+  #   image: redis:7.4.1
+  #   container_name: redis
+  #   ports:
+  #     - "6379:6379"
+  #   networks:
+  #     - my-network
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  redis-node-1:
+    image: bitnami/redis-cluster:latest
+    container_name: redis-node-1
+    environment:
+      - REDIS_NODES=redis-node-1,redis-node-2,redis-node-3,redis-node-4,redis-node-5,redis-node-6
+      - ALLOW_EMPTY_PASSWORD=yes
     ports:
       - "6379:6379"
     networks:
       - my-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    tmpfs:
+      - /bitnami/redis
+
+  redis-node-2:
+    image: bitnami/redis-cluster:latest
+    container_name: redis-node-2
+    environment:
+      - REDIS_NODES=redis-node-1,redis-node-2,redis-node-3,redis-node-4,redis-node-5,redis-node-6
+      - ALLOW_EMPTY_PASSWORD=yes
+    ports:
+      - "6380:6379"
+    networks:
+      - my-network
+    tmpfs:
+      - /bitnami/redis
+
+  redis-node-3:
+    image: bitnami/redis-cluster:latest
+    container_name: redis-node-3
+    environment:
+      - REDIS_NODES=redis-node-1,redis-node-2,redis-node-3,redis-node-4,redis-node-5,redis-node-6
+      - ALLOW_EMPTY_PASSWORD=yes
+    ports:
+      - "6381:6379"
+    networks:
+      - my-network
+    tmpfs:
+      - /bitnami/redis
+
+  redis-node-4:
+    image: bitnami/redis-cluster:latest
+    container_name: redis-node-4
+    environment:
+      - REDIS_NODES=redis-node-1,redis-node-2,redis-node-3,redis-node-4,redis-node-5,redis-node-6
+      - ALLOW_EMPTY_PASSWORD=yes
+    ports:
+      - "6382:6379"
+    networks:
+      - my-network
+    tmpfs:
+      - /bitnami/redis
+
+  redis-node-5:
+    image: bitnami/redis-cluster:latest
+    container_name: redis-node-5
+    environment:
+      - REDIS_NODES=redis-node-1,redis-node-2,redis-node-3,redis-node-4,redis-node-5,redis-node-6
+      - ALLOW_EMPTY_PASSWORD=yes
+    ports:
+      - "6383:6379"
+    networks:
+      - my-network
+    tmpfs:
+      - /bitnami/redis
+
+  redis-node-6:
+    image: bitnami/redis-cluster:latest
+    container_name: redis-node-6
+    environment:
+      - REDIS_NODES=redis-node-1,redis-node-2,redis-node-3,redis-node-4,redis-node-5,redis-node-6
+      - ALLOW_EMPTY_PASSWORD=yes
+    ports:
+      - "6384:6379"
+    networks:
+      - my-network
+    tmpfs:
+      - /bitnami/redis
+
+  redis-cluster-init-node:
+    container_name: redis-cluster-init-node
+    image: bitnami/redis-cluster:latest
+    command: >
+      redis-server --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes
+    entrypoint: "/bin/bash -c 'sleep 10 && redis-cli --cluster create redis-node-1:6379 redis-node-2:6379 redis-node-3:6379 redis-node-4:6379 redis-node-5:6379 redis-node-6:6379 --cluster-replicas 1 --cluster-yes'"
+    depends_on:
+      - redis-node-1
+      - redis-node-2
+      - redis-node-3
+      - redis-node-4
+      - redis-node-5
+      - redis-node-6
+    networks:
+      - my-network
 
   consul:
     image: consul:1.10.3
@@ -55,7 +149,7 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      redis:
+      redis-cluster-init-node:
         condition: service_started
     environment:
       DATABASE_URL: postgres://postgres:1111@postgres:5432/userdb
@@ -78,7 +172,7 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      redis:
+      redis-cluster-init-node:
         condition: service_started
     environment:
       DATABASE_URL: postgres://postgres:1111@postgres:5432/postdb
@@ -110,6 +204,7 @@ services:
       RECOMMENDATION_SERVICE_URL: http://recommendation_service:8001
       USER_SERVICE_URL: http://user_service:8000
       SAGA_DB_URL: postgres://postgres:1111@sagadb:5432/sagadb
+      REDIS_HOST: redis-cluster-init-node
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/status"]
       interval: 10s

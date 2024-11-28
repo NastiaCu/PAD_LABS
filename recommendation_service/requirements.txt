@@ -7,3 +7,4 @@ redis
 python-consul
 uuid
 prometheus-fastapi-instrumentator
+redis-py-cluster

@@ -9,9 +9,20 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const { v4: uuidv4 } = require('uuid'); 
 const client = require('prom-client');
 const { Client } = require('pg');
+const Redis = require('ioredis');
 
 const app = express();
 app.use(express.json());
+
+const redis = new Redis.Cluster([
+    { host: 'redis-cluster', port: 6379 }
+]);
+
+redis.on('message', (channel, message) => {
+    if (channel === 'comments_channel') {
+        wsManager.broadcast(`New comment: ${message}`);
+    }
+});
 
 const collectDefaultMetrics = client.collectDefaultMetrics;
 collectDefaultMetrics(); 

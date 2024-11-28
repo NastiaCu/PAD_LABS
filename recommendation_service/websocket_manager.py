@@ -2,14 +2,11 @@ import redis
 from fastapi import WebSocket
 from typing import List
 
-import redis
-import json
-
-redis_client = redis.Redis(host="redis", port=6379, decode_responses=True)
+redis_client = redis.Redis(host="redis-cluster-init-node", port=6379, decode_responses=True)
 
 class WebSocketManager:
     def __init__(self):
-        self.active_connections: List[WebSocket] = []
+        self.active_connections = []
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()

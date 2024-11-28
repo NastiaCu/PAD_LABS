@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, Depends, HTTPException
+from fastapi import FastAPI, WebSocket, Depends, HTTPException, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from typing import List
 import models, schemas, crud
@@ -13,10 +13,20 @@ import consul
 import os
 import uuid
 from prometheus_fastapi_instrumentator import Instrumentator
+from rediscluster import RedisCluster
 
 INSTANCE_ID = os.environ.get('INSTANCE_ID', '1')
 
-redis_client = redis.Redis(host="redis", port=6379, decode_responses=True)
+startup_nodes = [
+    {"host": "redis-node-1", "port": "6379"},
+    {"host": "redis-node-2", "port": "6379"},
+    {"host": "redis-node-3", "port": "6379"},
+    {"host": "redis-node-4", "port": "6379"},
+    {"host": "redis-node-5", "port": "6379"},
+    {"host": "redis-node-6", "port": "6379"}
+]
+
+redis_client = RedisCluster(startup_nodes=startup_nodes, decode_responses=True)
 
 def redis_comment_listener():
     pubsub = redis_client.pubsub()
@@ -25,6 +35,7 @@ def redis_comment_listener():
     for message in pubsub.listen():
         if message and message['type'] == 'message':
             print(f"New message from Redis: {message['data']}")
+            asyncio.run(ws_manager.broadcast(message['data']))
 
 listener_thread = threading.Thread(target=redis_comment_listener)
 listener_thread.daemon = True
@@ -125,13 +136,10 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_text()
             comment_data = json.loads(data)
             
-            print(f"Publishing to Redis: {comment_data}")
-            
             redis_client.publish("comments_channel", json.dumps(comment_data))
-            
             await ws_manager.broadcast(f"New comment: {comment_data['content']} by user {comment_data['user_id']}")
-    except Exception as e:
-        await ws_manager.disconnect(websocket)
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
 
 # Service status
 @app.get("/status")
