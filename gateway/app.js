@@ -140,7 +140,7 @@ const requestWindow = 100;
 const MAX_RETRIES = 3;
 
 setInterval(() => {
-    console.log(`Checking load: ${requestCount} requests`);
+    //console.log(`Checking load: ${requestCount} requests`);
     if (requestCount > REQUEST_LIMIT) {
         console.log(`ALERT: High request load detected! (${requestCount} requests per second)`);
     }
@@ -166,18 +166,42 @@ breaker.on('open', () => {
     console.log('Circuit breaker tripped! Too many failures (3 consecutive failures).');
 });
 
+
+let requestData = null;
+
 breaker.on('failure', async (error) => {
     console.log(`Request failed: ${error.message}`);
 
-    const failedServiceIp = error.config ? error.config.url : 'Unknown URL';
+    const failedServiceUrl = error.config ? error.config.url : 'Unknown URL';
+    if (failedServiceUrl !== 'Unknown URL') {
+        await deregisterFailedReplica('user-service', failedServiceUrl);
+        console.log(`Failed service at ${failedServiceUrl} deregistered.`);
+    }
 
-    if (failedServiceIp !== 'Unknown URL') {
-        await deregisterFailedReplica('user-service', failedServiceIp);
-        console.log(`Failed service at ${failedServiceIp} deregistered.`);
+    const healthyReplicas = await getActiveReplicas('user-service');
+
+    if (healthyReplicas.length > 0) {
+        const selectedReplica = healthyReplicas[0]; 
+        console.log(`Rerouting to healthy replica: ${selectedReplica}`);
+
+        if (requestData && requestUrl) {
+            try {
+                const reroutedUrl = `${selectedReplica}${requestUrl}`;
+                console.log(`Rerouted request to: ${reroutedUrl}`);
+                
+                const response = await axios.post(reroutedUrl, requestData);
+                console.log('Request successful to healthy replica:', response.data);
+            } catch (err) {
+                console.error('Failed to reroute to healthy replica:', err);
+            }
+        } else {
+            console.error('No request data found to reroute.');
+        }
     } else {
-        console.error('Failed to retrieve service URL for deregistration.');
+        console.error('No healthy replicas found. Service unavailable.');
     }
 });
+
 
 const PROTO_PATH = './user.proto';
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {});
@@ -301,9 +325,12 @@ const retryRequest = async (url, retries) => {
 //     }
 // }));
 
+let requestUrl = null;
+
 app.use('/api/users', async (req, res) => {
     const endpoint = req.url;  
     const requestData = req.body; 
+    requestUrl = req.originalUrl;
 
     try {
         const responseData = await sendRequestWithRetries('user-service', endpoint, requestData);
